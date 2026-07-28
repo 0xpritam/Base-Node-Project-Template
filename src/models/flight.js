@@ -36,11 +36,11 @@ module.exports = (sequelize, DataTypes) => {
 
     },
     departureAirportId: {
-      type: DataTypes.INTEGER,
+      type: DataTypes.STRING,
       allowNull:false
     },
     arrivalAirportId: {
-      type: DataTypes.INTEGER,
+      type: DataTypes.STRING,
       allowNull:false
     },
     arrivalTime: {

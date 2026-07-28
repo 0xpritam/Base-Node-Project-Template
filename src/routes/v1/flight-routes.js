@@ -16,7 +16,10 @@ router.get('/'
 router.delete('/:id',
     FlightController.deleteFlight);
 
-router.patch('/:id', FlightController.updtateFlight)
+router.patch('/:id', FlightController.updateFlight)
 
+router.patch('/:id/seats',
+    FlightMiddlewares.validateUpdateSeatsRequest,
+    FlightController.updateSeats)
 
 module.exports = router;

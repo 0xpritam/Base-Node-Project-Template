@@ -25,7 +25,7 @@ async function createAirplane(data) {
             console.log(explanation);
             throw new AppError(explanation, StatusCodes.BAD_REQUEST);
         }
-        throw new AppError("Cannot creatre a new airplane Object", StatusCodes.INTERNAL_SERVER_ERROR);
+        throw new AppError("Cannot create a new airplane Object", StatusCodes.INTERNAL_SERVER_ERROR);
     }
 
 }
@@ -67,7 +67,7 @@ async function destroyAirplane(id) {
     }
 }
 
-async function updtaeAirplane(id, data){
+async function updateAirplane(id, data){
     try {
         const airplane = await airplaneRepositories.update(id, data);
         return airplane;
@@ -84,5 +84,5 @@ module.exports = {
     getAirplanes,
     getAirplane,
     destroyAirplane,
-    updtaeAirplane
+    updateAirplane
 }

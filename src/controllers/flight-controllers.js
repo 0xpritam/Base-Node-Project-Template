@@ -43,7 +43,7 @@ async function getFlight(req, res) {
 
         return res
             .status(StatusCodes.OK)
-            .jsoon({ SuccessResponse });
+            .json({ SuccessResponse });
     } catch (error) {
         ErrorRespose.error = error;
 
@@ -54,7 +54,7 @@ async function getFlight(req, res) {
 }
 
 
-async function updtateFlight(req, res) {
+async function updateFlight(req, res) {
     try {
         const flight = await FlightService.updateFlight(req.params.id, req.body);
         SuccessResponse.data = flight;
@@ -110,10 +110,31 @@ async function getAllFlights(req, res) {
     }
 }
 
+async function updateSeats(req, res) {
+    try {
+        console.log(req.body);
+        const response = await FlightService.updateSeats({
+            flightId: req.params.id,
+            seats: req.body.seats, 
+            dec: req.body.dec
+        });
+        SuccessResponse.data = response;
+        return res
+                .status(StatusCodes.OK)
+                .json({ SuccessResponse });
+    } catch(error) {
+        ErrorRespose.error = error;
+        return res
+                .status(error.StatusCode || StatusCodes.INTERNAL_SERVER_ERROR)
+                .json({ ErrorRespose });
+    }
+}
+
 module.exports = {
     createFlights,
     getFlight,
-    updtateFlight,
+    updateFlight,
     deleteFlight,
-    getAllFlights
+    getAllFlights,
+    updateSeats
 }

@@ -85,7 +85,7 @@ async function deleteAirplane(req, res) {
 
 async function updateAirplane(req, res) {
     try {
-        const airplane = await AirplaneService.updtaeAirplane(req.params.id , req.body);
+        const airplane = await AirplaneService.updateAirplane(req.params.id , req.body);
         SuccessResponse.data = airplane;
 
         return res

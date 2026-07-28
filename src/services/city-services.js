@@ -53,7 +53,7 @@ async function updateCity(id, data) {
         return city;
     } catch (error) {
         if (error.StatusCode === StatusCodes.NOT_FOUND) {
-            throw new AppError("The city you request to updtae is  not present", error.StatusCode);
+            throw new AppError("The city you request to update is not present", error.StatusCode);
 
         }
 
