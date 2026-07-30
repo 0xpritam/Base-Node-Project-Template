@@ -124,3 +124,60 @@ Isolate domains into two distinct microservices: **Flight Service** (managing ma
   * Monolithic codebase with a single database.
 * **Why this project should use it**:
   * Microservices align with modern engineering practices for airlines. Separating the read-heavy search engine from the transactional booking system ensures peak performance during high-traffic events (e.g., holiday sales).
+
+---
+
+## Decision 7: Explicit Seat Status State Machine (`FlightSeats.status`)
+
+### Context:
+In traditional sparse architectures, seat availability is deduced implicitly (e.g., checking if `bookingId` is `NULL`). Under complex transaction lifecycles (holds, check-ins, refunds, timeouts), relying solely on `bookingId` creates ambiguity in tracking intermediate seat states.
+
+### Decision:
+Introduce an explicit `status` column on `FlightSeats` using an ENUM with values: `AVAILABLE`, `HELD`, and `BOOKED`.
+
+* **Advantages**:
+  * **Improved Readability**: The state of a seat is self-documenting directly inside the database row.
+  * **Hold Windows Supporting TTL**: Differentiates between a seat currently in checkout hold (`HELD` with a `reservedUntil` timestamp) vs. a seat fully paid and reserved (`BOOKED`), simplifying cleanup scheduler queries.
+  * **Auditability & Logging**: Facilitates debugging and analytical metrics on search cart abandonments (counting seats stuck in `HELD` state).
+* **Disadvantages**:
+  * Adds extra state to maintain during cancellations and state transitions.
+* **Alternatives**:
+  * Deducing holds from the existence of a corresponding row in a separate `SeatHolds` table.
+* **Why this project should use it**:
+  * Standardizing states as `AVAILABLE`, `HELD`, and `BOOKED` directly inside the Flight Service makes it extremely straightforward for the Booking Service to request a block, and for the redis timeout listener to free the seat.
+
+---
+
+## Decision 8: Inter-Service Idempotency via IdempotencyKeys Table
+
+### Context:
+Under unreliable network conditions, remote API requests can timeout or fail. If the Booking Service retries a seat reservation request, we must prevent double-reservation, double-releases, and duplicate seat confirmations.
+
+### Decision:
+Implement an database-backed **Idempotency Engine** inside the Flight Service using an `IdempotencyKeys` table. The `bookingId` serves as the idempotency key and is passed via the `X-Idempotency-Key` request header.
+
+* **Advantages**:
+  * **Absolute Safety**: Prevents duplicate seat state changes regardless of client retries or network drops.
+  * **Generic Implementation**: Handled transparently by an Express middleware in the Flight Service, avoiding custom code changes inside core service logic.
+  * **Conflict Detection**: Returns `409 Conflict` if a duplicate request arrives while the first call is still executing.
+* **Disadvantages**:
+  * Adds database write overhead for saving request keys and matching cached responses.
+* **Alternatives**:
+  * Let the business logic handle duplicates (e.g. ignoring duplicate checks in the service layers), which is highly error-prone and complex to maintain.
+* **Why this project should use it**:
+  * Distributed transactions (Sagas) rely heavily on idempotent operations. Having a central middleware in the Flight Service that caches and returns previous responses for the same `bookingId` guarantees consistency and robustness.
+
+## Decision 9: Double-Guarded Expiry Saga (Redis TTL + Recovery Worker)
+
+### Context:
+When a booking is created, seats are placed in `HELD` status. If the payment is not completed within the timeout period, these seats must be released. Redis keyspace expiration notifications are excellent for immediate triggers, but they are not guaranteed (e.g. if the Node worker is down when the event triggers, or during Redis failovers).
+
+### Decision:
+Implement a double-guarded timeout architecture combining:
+1. **Redis Expiration Worker**: Subscribes to keyspace notifications on `booking:expiry:<id>` and triggers compensating releases immediately on event fire.
+2. **Recovery Worker**: A background job that scans the database periodically for stale `PENDING` bookings older than the configured timeout threshold and processes cancellations.
+
+* **Advantages**:
+  * **High Reliability**: Guarantees zero orphaned seat holds even if the Redis event listener crashes or loses events.
+  * **Pessimistic Safety**: Uses database row locking (`SELECT FOR UPDATE`) to prevent race conditions between the workers and late-arriving payment webhooks.
+  * **No Duplicate TTL Metadata**: Expiry worker parses the ID from the expired key and queries the database for metadata (which stores passengers/seats in the `passengers` column), eliminating the need for Redis twin-key synchronization.

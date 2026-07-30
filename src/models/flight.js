@@ -22,7 +22,11 @@ module.exports = (sequelize, DataTypes) => {
       this.belongsTo(models.Airport,{
         foreignKey:'arrivalAirportId',
       as: 'arrivalAirport'
-      })
+      });
+      this.hasMany(models.FlightSeat, {
+        foreignKey: 'flightId',
+        onDelete: 'CASCADE'
+      });
     }
   }
   Flight.init({

@@ -18,6 +18,10 @@ module.exports = (sequelize, DataTypes) => {
        this.belongsTo(models.Airplane, {
         foreignKey:'airplaneId',
       });
+       this.hasMany(models.FlightSeat, {
+         foreignKey: 'seatId',
+         onDelete: 'CASCADE'
+       });
     }
   }
   Seat.init({

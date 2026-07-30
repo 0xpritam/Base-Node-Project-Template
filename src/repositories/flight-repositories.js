@@ -1,12 +1,41 @@
 const CrudRepositories = require('./crud-repositories');
 const { Sequelize } = require('sequelize');
-const { Flight, Airplane, Airport, City } = require('../models');
+const { Flight, Airplane, Airport, City, Seat, FlightSeat } = require('../models');
 const db = require('../models');
 const { addRowLockOnFlights } = require('./queries');
 
 class flightsRepositories extends CrudRepositories {
     constructor() {
         super(Flight);
+    }
+
+    async create(data) {
+        const transaction = await db.sequelize.transaction();
+        try {
+            const flight = await Flight.create(data, { transaction });
+
+            const seats = await Seat.findAll({
+                where: {
+                    airplaneId: data.airplaneId
+                }
+            });
+
+            const flightSeatsPayload = seats.map(seat => ({
+                flightId: flight.id,
+                seatId: seat.id,
+                status: 'AVAILABLE',
+                bookingId: null,
+                reservedUntil: null
+            }));
+
+            await FlightSeat.bulkCreate(flightSeatsPayload, { transaction });
+
+            await transaction.commit();
+            return flight;
+        } catch(error) {
+            await transaction.rollback();
+            throw error;
+        }
     }
 
     async getAllFlights(filter, sort) {

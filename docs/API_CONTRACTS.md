@@ -282,19 +282,48 @@ All routes are prefixed with `/api/v1`.
 
 ---
 
-## 2. Planned Internal APIs (For Booking integration)
+## 2. Flight Seat Grid APIs
 
-These endpoints are exposed by Flight Service internally to the Booking Service.
+These endpoints are exposed by Flight Service to manage individual seat mappings.
 
-### A. Reserve/Release Seats
+### A. Get Flight Seat Map
+* **HTTP Method**: `GET`
+* **Path**: `/flight/:id/seats`
+* **Success Response (`200 OK`)**:
+  ```json
+  {
+    "SuccessResponse": {
+      "success": true,
+      "message": "Successfully completed the request",
+      "data": [
+        {
+          "seatId": 1,
+          "seatNumber": "1A",
+          "seatType": "economy",
+          "status": "AVAILABLE"
+        },
+        {
+          "seatId": 2,
+          "seatNumber": "1B",
+          "seatType": "business",
+          "status": "HELD"
+        }
+      ],
+      "error": {}
+    }
+  }
+  ```
+
+### B. Reserve/Release Seats
 * **HTTP Method**: `PATCH`
 * **Path**: `/flight/:id/seats`
 * **Request Body**:
   ```json
   {
-    "seats": 2,
-    "dec": true,
-    "seatIds": [14, 15]
+    "seatIds": [1, 2],
+    "action": "RESERVE",
+    "bookingId": 12345,
+    "reservedUntil": "2026-07-29T10:10:00.000Z"
   }
   ```
 * **Success Response (`200 OK`)**:
@@ -302,11 +331,9 @@ These endpoints are exposed by Flight Service internally to the Booking Service.
   {
     "SuccessResponse": {
       "success": true,
-      "message": "Seats successfully locked",
-      "data": {
-        "flightId": 1,
-        "remainingSeats": 178
-      }
+      "message": "Successfully completed the request",
+      "data": true,
+      "error": {}
     }
   }
   ```
@@ -370,3 +397,18 @@ These endpoints are exposed by Flight Service internally to the Booking Service.
     }
   }
   ```
+
+---
+
+## 4. Inter-Service Idempotency Contract
+
+To prevent double-reservation, double-releases, and duplicate seat confirmations under network failures or retries, all inter-service seat modifications must enforce idempotency.
+
+### Request Headers
+* `X-Idempotency-Key` (Required): A unique string identifying the request transaction. In this booking lifecycle, the `bookingId` serves as the idempotency key.
+
+### Behavior & Status Codes
+* **First Request**: The Flight Service registers the `X-Idempotency-Key` as `PENDING`, executes the transaction, records the response status and body in `IdempotencyKeys` table, and returns the response.
+* **Concurrent Duplicate Requests**: If a duplicate request with the same `X-Idempotency-Key` is received while the first execution is still active, the Flight Service rejects it with `409 Conflict`.
+* **Subsequent Duplicate Requests**: If a duplicate request is received after completion, the Flight Service intercepts the request in the middleware, retrieves the cached response status and body from `IdempotencyKeys`, and returns it directly without executing any database business logic or updates.
+

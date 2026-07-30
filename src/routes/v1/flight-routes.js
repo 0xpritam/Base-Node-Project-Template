@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { FlightController } = require('../../controllers');
-const { FlightMiddlewares } = require('../../middlewares');
+const { FlightMiddlewares, IdempotencyMiddlewares } = require('../../middlewares');
 
 router.post('/',
     FlightMiddlewares.validatecreateRequest,
@@ -19,7 +19,11 @@ router.delete('/:id',
 router.patch('/:id', FlightController.updateFlight)
 
 router.patch('/:id/seats',
+    IdempotencyMiddlewares.handleIdempotency,
     FlightMiddlewares.validateUpdateSeatsRequest,
     FlightController.updateSeats)
+
+router.get('/:id/seats',
+    FlightController.getFlightSeats)
 
 module.exports = router;

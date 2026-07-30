@@ -110,13 +110,15 @@ erDiagram
   * `arrivalAirportId` (FK Index)
   * **Recommended Index**: Composite Index on `(departureAirportId, arrivalAirportId, departurTime)` to optimize query searches.
 
-### F. `FlightSeats` Table (Recommended for Active Project)
+### F. `FlightSeats` Table
 * **Purpose**: Tracks dynamic seat availability for specific flight instances.
 * **Columns**:
   * `id` (INT, PK, Auto Increment, Non-Null)
   * `flightId` (INT, FK -> `Flights.id`, Non-Null)
   * `seatId` (INT, FK -> `Seats.id`, Non-Null)
-  * `bookingId` (INT, Nullable): Temporary hold/order lock identifier.
+  * `bookingId` (INT, Nullable): Temporary hold or confirmed booking order lock identifier.
+  * `status` (ENUM('AVAILABLE', 'HELD', 'BOOKED'), Non-Null, Default: 'AVAILABLE')
+  * `reservedUntil` (DATETIME, Nullable): Expiry timestamp for HELD bookings.
   * `createdAt` (DATETIME, Non-Null)
   * `updatedAt` (DATETIME, Non-Null)
 * **Foreign Keys**:
@@ -125,6 +127,6 @@ erDiagram
 * **Indexes**:
   * `PRIMARY` on `id`
   * `flightId` (FK Index)
-  * `seatId` (FK Index)
   * `bookingId` (FK Index)
-  * `flightId_seatId_unique`: Composite Unique Index on `(flightId, seatId)` to prevent duplicate allocations.
+  * `flightId_status`: Composite Index on `(flightId, status)` to optimize queries for available seats.
+  * `flightId_seatId_unique`: Composite Unique Index on `(flightId, seatId)` to prevent duplicate seat assignments.
