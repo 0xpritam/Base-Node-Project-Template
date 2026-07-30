@@ -3,7 +3,7 @@ const FlightServiceClient = require('./flight-service-client');
 const db = require('../models');
 const AppError = require('../utils/errors/app-error');
 const { StatusCodes } = require('http-status-codes');
-const { RedisConfig, ServerConfig } = require('../config');
+const { RedisConfig, ServerConfig, Logger } = require('../config');
 
 const bookingRepository = new BookingRepository();
 
@@ -63,7 +63,7 @@ async function createBooking(data) {
         await transaction.commit();
     } catch(error) {
         await transaction.rollback();
-        console.log(error);
+        Logger.error('Error during createBooking transaction initiation:', { error });
         if (error instanceof AppError) throw error;
         throw new AppError('Cannot initiate booking creation', StatusCodes.INTERNAL_SERVER_ERROR);
     }
@@ -88,7 +88,7 @@ async function createBooking(data) {
         const freshBooking = await bookingRepository.get(booking.id);
         return freshBooking;
     } catch(error) {
-        console.log("Downstream reserve seats failed, initiating compensating transaction...");
+        Logger.error("Downstream reserve seats failed, initiating compensating transaction...", { error });
         // Saga Compensating transaction: Cancel local booking
         await bookingRepository.update(booking.id, { status: 'CANCELLED' });
         if (error instanceof AppError) throw error;
@@ -99,111 +99,127 @@ async function createBooking(data) {
 async function makePayment(paymentData) {
     const { bookingId, status } = paymentData;
 
-    // 1. Fetch booking
-    const booking = await bookingRepository.get(bookingId);
-    
-    // 2. Validate booking state is PENDING
-    if (booking.status !== 'PENDING') {
-        throw new AppError('This booking is not in a pending payment state', StatusCodes.BAD_REQUEST);
+    // 1. Claim status transition with row lock inside local transaction to prevent concurrent processing
+    const initTransaction = await db.sequelize.transaction();
+    let booking;
+    try {
+        booking = await db.Booking.findByPk(bookingId, {
+            transaction: initTransaction,
+            lock: initTransaction.LOCK.UPDATE
+        });
+
+        if (!booking) {
+            throw new AppError('Booking not found', StatusCodes.NOT_FOUND);
+        }
+
+        // 2. Validate booking state is PENDING (concurrency check)
+        if (booking.status !== 'PENDING') {
+            throw new AppError('This booking is not in a pending payment state', StatusCodes.BAD_REQUEST);
+        }
+
+        // 3. Mark status change first to unlock the database row and block other threads
+        const targetStatus = status === 'SUCCESS' ? 'CONFIRMED' : 'CANCELLED';
+        await booking.update({ status: targetStatus }, { transaction: initTransaction });
+        await initTransaction.commit();
+    } catch(err) {
+        await initTransaction.rollback();
+        throw err;
     }
 
+    const passengersList = JSON.parse(booking.passengers || '[]');
+    const seatIds = passengersList.map(p => p.seatId);
+
     if (status === 'SUCCESS') {
-        // Extract passenger list & seat IDs
-        const passengersList = JSON.parse(booking.passengers || '[]');
-        const seatIds = passengersList.map(p => p.seatId);
-
-        // 3. Downstream call to Flight Service to confirm seats
-        await FlightServiceClient.confirmSeats(booking.flightId, seatIds, bookingId);
-
-        // 4. Create Passenger and Ticket records inside database transaction
-        const dbTransaction = await db.sequelize.transaction();
         try {
-            // Fetch flight seat map to map seat numbers
-            const flightSeats = await FlightServiceClient.getFlightSeats(booking.flightId);
-            const seatMap = new Map();
-            flightSeats.forEach(fs => {
-                seatMap.set(fs.seatId, fs.seatDetail?.seatNumber || `S${fs.seatId}`);
-            });
+            // 4. Downstream call to Flight Service to confirm seats
+            await FlightServiceClient.confirmSeats(booking.flightId, seatIds, bookingId);
 
-            for (const pInfo of passengersList) {
-                const firstName = pInfo.firstName;
-                const lastName = pInfo.lastName;
-                const email = pInfo.email || null;
-                const phoneNumber = pInfo.phoneNumber || null;
-                const passportNumber = pInfo.passportNumber || null;
-                const seatId = pInfo.seatId;
-
-                // Find or create passenger
-                const [passenger] = await db.Passenger.findOrCreate({
-                    where: { firstName, lastName, passportNumber },
-                    defaults: { email, phoneNumber },
-                    transaction: dbTransaction
+            // 5. Create Passenger and Ticket records inside database transaction
+            const ticketTransaction = await db.sequelize.transaction();
+            try {
+                // Fetch flight seat map to map seat numbers
+                const flightSeats = await FlightServiceClient.getFlightSeats(booking.flightId);
+                const seatMap = new Map();
+                flightSeats.forEach(fs => {
+                    seatMap.set(fs.seatId, fs.seatDetail?.seatNumber || `S${fs.seatId}`);
                 });
 
-                // Generate unique PNR
-                const pnr = `${generatePNR()}-${bookingId}`;
+                for (const pInfo of passengersList) {
+                    const firstName = pInfo.firstName;
+                    const lastName = pInfo.lastName;
+                    const email = pInfo.email || null;
+                    const phoneNumber = pInfo.phoneNumber || null;
+                    const passportNumber = pInfo.passportNumber || null;
+                    const seatId = pInfo.seatId;
 
-                // Get seat number
-                const seatNumber = seatMap.get(seatId) || `S${seatId}`;
+                    // Find or create passenger
+                    const [passenger] = await db.Passenger.findOrCreate({
+                        where: { firstName, lastName, passportNumber },
+                        defaults: { email, phoneNumber },
+                        transaction: ticketTransaction
+                    });
 
-                // Create Ticket record
-                await db.Ticket.create(
-                    {
-                        bookingId,
-                        passengerId: passenger.id,
-                        seatId,
-                        seatNumber,
-                        pnr
-                    },
-                    { transaction: dbTransaction }
-                );
+                    // Generate unique PNR
+                    const pnr = `${generatePNR()}-${bookingId}`;
+
+                    // Get seat number
+                    const seatNumber = seatMap.get(seatId) || `S${seatId}`;
+
+                    // Create Ticket record
+                    await db.Ticket.create(
+                        {
+                            bookingId,
+                            passengerId: passenger.id,
+                            seatId,
+                            seatNumber,
+                            pnr
+                        },
+                        { transaction: ticketTransaction }
+                    );
+                }
+
+                await ticketTransaction.commit();
+            } catch (err) {
+                await ticketTransaction.rollback();
+                throw err;
             }
 
-            // Update booking status to CONFIRMED
-            await bookingRepository.update(bookingId, { status: 'CONFIRMED' }, { transaction: dbTransaction });
-            await dbTransaction.commit();
-        } catch (err) {
-            await dbTransaction.rollback();
-            throw err;
+            // 6. Delete Redis TTL key on success
+            await RedisConfig.redisClient.del(`booking:expiry:${bookingId}`);
+
+            // Fetch fully populated booking details
+            const confirmedBooking = await db.Booking.findByPk(bookingId, {
+                include: [
+                    {
+                        model: db.Ticket,
+                        include: [db.Passenger]
+                    }
+                ]
+            });
+            return confirmedBooking;
+        } catch(error) {
+            Logger.error(`Downstream confirm seats failed for booking ${bookingId}, reverting local status to PENDING...`, { error });
+            await bookingRepository.update(bookingId, { status: 'PENDING' });
+            if (error instanceof AppError) throw error;
+            throw error;
         }
-
-        // Delete Redis TTL key on success
-        await RedisConfig.redisClient.del(`booking:expiry:${bookingId}`);
-
-        // Fetch fully populated booking details
-        const confirmedBooking = await db.Booking.findByPk(bookingId, {
-            include: [
-                {
-                    model: db.Ticket,
-                    include: [db.Passenger]
-                }
-            ]
-        });
-        return confirmedBooking;
     } else {
-        // Extract passenger list & seat IDs
-        const passengersList = JSON.parse(booking.passengers || '[]');
-        const seatIds = passengersList.map(p => p.seatId);
-
-        // 3. Downstream compensating call to Flight Service to release seats
-        await FlightServiceClient.releaseSeats(booking.flightId, seatIds, bookingId);
-
-        // 4. Update local booking status to CANCELLED inside transaction
-        const dbTransaction = await db.sequelize.transaction();
         try {
-            await bookingRepository.update(bookingId, { status: 'CANCELLED' }, { transaction: dbTransaction });
-            await dbTransaction.commit();
-        } catch (err) {
-            await dbTransaction.rollback();
-            throw err;
+            // 4. Downstream compensating call to Flight Service to release seats
+            await FlightServiceClient.releaseSeats(booking.flightId, seatIds, bookingId);
+
+            // 5. Delete Redis TTL key on payment failure
+            await RedisConfig.redisClient.del(`booking:expiry:${bookingId}`);
+
+            // Fetch updated cancelled booking details
+            const cancelledBooking = await bookingRepository.get(bookingId);
+            return cancelledBooking;
+        } catch(error) {
+            Logger.error(`Downstream release seats failed for booking ${bookingId}, reverting local status to PENDING...`, { error });
+            await bookingRepository.update(bookingId, { status: 'PENDING' });
+            if (error instanceof AppError) throw error;
+            throw error;
         }
-
-        // Delete Redis TTL key on payment failure
-        await RedisConfig.redisClient.del(`booking:expiry:${bookingId}`);
-
-        // Fetch updated cancelled booking details
-        const cancelledBooking = await bookingRepository.get(bookingId);
-        return cancelledBooking;
     }
 }
 
@@ -225,7 +241,7 @@ async function cancelBooking(bookingId, cancelReason = 'PAYMENT_TIMEOUT') {
     try {
         await FlightServiceClient.releaseSeats(booking.flightId, seatIds, bookingId);
     } catch(err) {
-        console.error(`Failed downstream release seats for booking ${bookingId} on expiration:`, err);
+        Logger.error(`Failed downstream release seats for booking ${bookingId} on expiration:`, { error: err });
         throw err;
     }
 

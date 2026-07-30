@@ -1,6 +1,7 @@
 const { StatusCodes } = require('http-status-codes');
 const { FlightRepositories, FlightSeatRepository } = require('../repositories');
 const AppError = require('../utils/errors/app-errors');
+const db = require('../models');
 const { compareTime } = require('../utils/helpers/datetime-helpers');
 const { Op } = require('sequelize');
 
@@ -127,6 +128,7 @@ async function getAllFlights(query) {
 }
 
 async function updateSeats(data) {
+    const transaction = await db.sequelize.transaction();
     try {
         let response;
         if (data.action === 'RESERVE') {
@@ -134,27 +136,32 @@ async function updateSeats(data) {
                 data.flightId, 
                 data.seatIds, 
                 data.bookingId, 
-                data.reservedUntil
+                data.reservedUntil,
+                transaction
             );
-            await flightRepositories.updateRemainingSeats(data.flightId, data.seatIds.length, true);
+            await flightRepositories.updateRemainingSeats(data.flightId, data.seatIds.length, true, transaction);
         } else if (data.action === 'RELEASE') {
             response = await flightSeatRepository.releaseSeats(
                 data.flightId, 
                 data.seatIds,
-                data.bookingId
+                data.bookingId,
+                transaction
             );
-            await flightRepositories.updateRemainingSeats(data.flightId, data.seatIds.length, false);
+            await flightRepositories.updateRemainingSeats(data.flightId, data.seatIds.length, false, transaction);
         } else if (data.action === 'CONFIRM') {
             response = await flightSeatRepository.confirmSeats(
                 data.flightId,
                 data.seatIds,
-                data.bookingId
+                data.bookingId,
+                transaction
             );
         } else {
             throw new AppError('Invalid action specified', StatusCodes.BAD_REQUEST);
         }
+        await transaction.commit();
         return response;
     } catch(error) {
+        await transaction.rollback();
         console.log(error);
         if (error.name === 'AppError') throw error;
         throw new AppError(error.message || 'Cannot update seats of the flight', StatusCodes.INTERNAL_SERVER_ERROR);

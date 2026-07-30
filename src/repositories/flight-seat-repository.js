@@ -49,12 +49,12 @@ class FlightSeatRepository extends CrudRepositories {
         return flightSeats;
     }
 
-    async reserveSeats(flightId, seatIds, bookingId, reservedUntil = null) {
+    async reserveSeats(flightId, seatIds, bookingId, reservedUntil = null, transaction = null) {
         this._validateUniqueSeats(seatIds, 'Duplicate seat IDs are not allowed in a single reservation request');
 
-        const transaction = await db.sequelize.transaction();
+        const localTransaction = transaction || await db.sequelize.transaction();
         try {
-            const flightSeats = await this._getLockedFlightSeats(flightId, seatIds, transaction);
+            const flightSeats = await this._getLockedFlightSeats(flightId, seatIds, localTransaction);
 
             // Verify that all requested seats are AVAILABLE
             const unavailableSeats = flightSeats.filter(fs => fs.status !== 'AVAILABLE');
@@ -74,24 +74,28 @@ class FlightSeatRepository extends CrudRepositories {
                         flightId: flightId,
                         seatId: seatIds
                     },
-                    transaction
+                    transaction: localTransaction
                 }
             );
 
-            await transaction.commit();
+            if (!transaction) {
+                await localTransaction.commit();
+            }
             return true;
         } catch(error) {
-            await transaction.rollback();
+            if (!transaction) {
+                await localTransaction.rollback();
+            }
             throw error;
         }
     }
 
-    async releaseSeats(flightId, seatIds, bookingId) {
+    async releaseSeats(flightId, seatIds, bookingId, transaction = null) {
         this._validateUniqueSeats(seatIds, 'Duplicate seat IDs are not allowed in a single release request');
 
-        const transaction = await db.sequelize.transaction();
+        const localTransaction = transaction || await db.sequelize.transaction();
         try {
-            const flightSeats = await this._getLockedFlightSeats(flightId, seatIds, transaction);
+            const flightSeats = await this._getLockedFlightSeats(flightId, seatIds, localTransaction);
 
             // Verify that all requested seats belong to the supplied bookingId and are HELD or BOOKED
             for (const fs of flightSeats) {
@@ -115,24 +119,28 @@ class FlightSeatRepository extends CrudRepositories {
                         flightId: flightId,
                         seatId: seatIds
                     },
-                    transaction
+                    transaction: localTransaction
                 }
             );
 
-            await transaction.commit();
+            if (!transaction) {
+                await localTransaction.commit();
+            }
             return true;
         } catch(error) {
-            await transaction.rollback();
+            if (!transaction) {
+                await localTransaction.rollback();
+            }
             throw error;
         }
     }
 
-    async confirmSeats(flightId, seatIds, bookingId) {
+    async confirmSeats(flightId, seatIds, bookingId, transaction = null) {
         this._validateUniqueSeats(seatIds, 'Duplicate seat IDs are not allowed in a single confirmation request');
 
-        const transaction = await db.sequelize.transaction();
+        const localTransaction = transaction || await db.sequelize.transaction();
         try {
-            const flightSeats = await this._getLockedFlightSeats(flightId, seatIds, transaction);
+            const flightSeats = await this._getLockedFlightSeats(flightId, seatIds, localTransaction);
 
             // Verify that all requested seats belong to the supplied bookingId and are currently HELD
             for (const fs of flightSeats) {
@@ -155,16 +163,20 @@ class FlightSeatRepository extends CrudRepositories {
                         flightId: flightId,
                         seatId: seatIds
                     },
-                    transaction
+                    transaction: localTransaction
                 }
             );
 
-            await transaction.commit();
+            if (!transaction) {
+                await localTransaction.commit();
+            }
             return {
                 confirmedSeatsCount: seatIds.length
             };
         } catch(error) {
-            await transaction.rollback();
+            if (!transaction) {
+                await localTransaction.rollback();
+            }
             throw error;
         }
     }

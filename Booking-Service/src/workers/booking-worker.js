@@ -1,12 +1,12 @@
 const { Op } = require('sequelize');
 const db = require('../models');
-const { RedisConfig, ServerConfig } = require('../config');
+const { RedisConfig, ServerConfig, Logger } = require('../config');
 const BookingService = require('../services/booking-service');
 
 async function subscribeToExpirations(onExpiredCallback) {
     if (RedisConfig.isMock) {
         RedisConfig.redisClient.on('expired', onExpiredCallback);
-        console.log('[Expiration Worker] Mock Redis subscription active.');
+        Logger.info('[Expiration Worker] Mock Redis subscription active.');
     } else {
         try {
             // Enable keyspace events in Redis
@@ -17,15 +17,15 @@ async function subscribeToExpirations(onExpiredCallback) {
             await subscriber.subscribe('__keyevent@0__:expired', (key) => {
                 onExpiredCallback(key);
             });
-            console.log('[Expiration Worker] Real Redis keyspace expiration subscription active.');
+            Logger.info('[Expiration Worker] Real Redis keyspace expiration subscription active.');
         } catch(err) {
-            console.error('[Expiration Worker] Failed to subscribe to keyspace notifications:', err);
+            Logger.error('[Expiration Worker] Failed to subscribe to keyspace notifications:', { error: err });
         }
     }
 }
 
 async function handleExpiration(key) {
-    console.log(`[Expiration Worker] Expiration event triggered for key: ${key}`);
+    Logger.info(`[Expiration Worker] Expiration event triggered for key: ${key}`);
     
     // Parse key name: e.g. booking:expiry:10
     if (key && key.startsWith('booking:expiry:')) {
@@ -33,18 +33,18 @@ async function handleExpiration(key) {
         const bookingId = Number(parts[parts.length - 1]);
         
         if (bookingId && !isNaN(bookingId)) {
-            console.log(`[Expiration Worker] Initiating automatic timeout compensation for Booking ID: ${bookingId}`);
+            Logger.info(`[Expiration Worker] Initiating automatic timeout compensation for Booking ID: ${bookingId}`);
             try {
                 await BookingService.cancelBooking(bookingId, 'PAYMENT_TIMEOUT');
             } catch(err) {
-                console.error(`[Expiration Worker] Failed to cancel expired booking ID ${bookingId}:`, err);
+                Logger.error(`[Expiration Worker] Failed to cancel expired booking ID ${bookingId}:`, { error: err });
             }
         }
     }
 }
 
 async function runRecovery() {
-    console.log('[Recovery Worker] Scanning for stale PENDING bookings...');
+    Logger.info('[Recovery Worker] Scanning for stale PENDING bookings...');
     try {
         const timeoutThreshold = new Date(Date.now() - ServerConfig.BOOKING_TIMEOUT * 1000);
         
@@ -58,23 +58,23 @@ async function runRecovery() {
         });
 
         if (staleBookings.length > 0) {
-            console.log(`[Recovery Worker] Found ${staleBookings.length} stale PENDING bookings older than timeout.`);
+            Logger.info(`[Recovery Worker] Found ${staleBookings.length} stale PENDING bookings older than timeout.`);
             for (const booking of staleBookings) {
-                console.log(`[Recovery Worker] Auto-compensating stale booking ID: ${booking.id}`);
+                Logger.info(`[Recovery Worker] Auto-compensating stale booking ID: ${booking.id}`);
                 try {
                     await BookingService.cancelBooking(booking.id, 'PAYMENT_TIMEOUT');
                 } catch(err) {
-                    console.error(`[Recovery Worker] Recovery failed for booking ID ${booking.id}:`, err);
+                    Logger.error(`[Recovery Worker] Recovery failed for booking ID ${booking.id}:`, { error: err });
                 }
             }
         }
     } catch(err) {
-        console.error('[Recovery Worker] Stale bookings scan error:', err);
+        Logger.error('[Recovery Worker] Stale bookings scan error:', { error: err });
     }
 }
 
 function startWorkers() {
-    console.log('[Workers Manager] Starting background worker threads...');
+    Logger.info('[Workers Manager] Starting background worker threads...');
 
     // 1. Expiration Worker subscription
     subscribeToExpirations(handleExpiration);
