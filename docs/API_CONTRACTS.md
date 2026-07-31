@@ -412,3 +412,107 @@ To prevent double-reservation, double-releases, and duplicate seat confirmations
 * **Concurrent Duplicate Requests**: If a duplicate request with the same `X-Idempotency-Key` is received while the first execution is still active, the Flight Service rejects it with `409 Conflict`.
 * **Subsequent Duplicate Requests**: If a duplicate request is received after completion, the Flight Service intercepts the request in the middleware, retrieves the cached response status and body from `IdempotencyKeys`, and returns it directly without executing any database business logic or updates.
 
+---
+
+## 5. Auth Service APIs
+
+All routes are prefixed with `/api/v1/auth`.
+
+### A. Register User
+* **HTTP Method**: `POST`
+* **Path**: `/register`
+* **Request Body**:
+  ```json
+  {
+    "firstName": "Alice",
+    "lastName": "Smith",
+    "email": "alice@test.com",
+    "password": "Password123!",
+    "phoneNumber": "1234567890"
+  }
+  ```
+* **Success Response (`201 Created`)**:
+  ```json
+  {
+    "success": true,
+    "message": "Successfully registered the user",
+    "data": {
+      "user": {
+        "id": 1,
+        "firstName": "Alice",
+        "lastName": "Smith",
+        "email": "alice@test.com",
+        "phoneNumber": "1234567890",
+        "status": "ACTIVE",
+        "isEmailVerified": false,
+        "createdAt": "2026-08-01T00:00:00.000Z",
+        "updatedAt": "2026-08-01T00:00:00.000Z"
+      },
+      "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIx..."
+    },
+    "error": {}
+  }
+  ```
+
+### B. Login User
+* **HTTP Method**: `POST`
+* **Path**: `/login`
+* **Request Body**:
+  ```json
+  {
+    "email": "alice@test.com",
+    "password": "Password123!"
+  }
+  ```
+* **Success Response (`200 OK`)**:
+  ```json
+  {
+    "success": true,
+    "message": "Successfully authenticated the user",
+    "data": {
+      "user": {
+        "id": 1,
+        "firstName": "Alice",
+        "lastName": "Smith",
+        "email": "alice@test.com",
+        "phoneNumber": "1234567890",
+        "status": "ACTIVE",
+        "isEmailVerified": false,
+        "createdAt": "2026-08-01T00:00:00.000Z",
+        "updatedAt": "2026-08-01T00:00:00.000Z"
+      },
+      "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIx..."
+    },
+    "error": {}
+  }
+  ```
+
+### C. Get Current User Profile
+* **HTTP Method**: `GET`
+* **Path**: `/me`
+* **Headers**:
+  * `Authorization`: `Bearer <Access_Token>`
+* **Success Response (`200 OK`)**:
+  ```json
+  {
+    "success": true,
+    "message": "Successfully fetched user profile details",
+    "data": {
+      "id": 1,
+      "firstName": "Alice",
+      "lastName": "Smith",
+      "email": "alice@test.com",
+      "phoneNumber": "1234567890",
+      "status": "ACTIVE",
+      "isEmailVerified": false,
+      "roles": [
+        "CUSTOMER"
+      ],
+      "createdAt": "2026-08-01T00:00:00.000Z",
+      "updatedAt": "2026-08-01T00:00:00.000Z"
+    },
+    "error": {}
+  }
+  ```
+
+

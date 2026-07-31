@@ -16,12 +16,15 @@ This roadmap details the current implementation status and outlines subsequent m
 * **Flight Service Stabilization & Debugging**: Fixed the Flight-Airport datatype mismatch, controller typos (`res.jsoon`), spelling inconsistencies (`updtateFlight`, `updtaeAirplane`), and middleware validation bugs.
 * **Concurrency Seat Locking Engine**: Ported row-level transaction locking (`SELECT FOR UPDATE`) and the `PATCH /flight/:id/seats` API to the active root project.
 * **Booking Service Scaffolding**: Initialized `/Booking-Service` microservice, creating its `package.json`, environment configs, database tables migrations (Bookings, Passengers, Tickets), Sequelize models, repositories, controllers, services, and route layers.
+* **Booking Service Saga Logic**: Fully implemented creation locks, Saga payment confirmation/failure flows, and double-guarded background timeout sweeps (Redis Expiry + database Recovery worker).
+* **Auth Service Boilerplate & DB Persistence (Milestones 5.1 & 5.2)**: Created dedicated `/Auth-Service` directory, Winston logger config, response proxies, database schemas and models (User, Role, UserRole, UserSession), migrations, seeders, and repositories.
+* **Auth Service Core APIs (Milestone 5.3)**: Fully implemented registration (with password complexity checks, duplicate email prevention), login authentication (status guards, bcrypt checks), and authenticated profile retrieval (`GET /me` excluding passwords).
 
 ### In Progress
-* **Auth Service Microservice**: Designing and initializing authorization scopes, JWT middlewares, RBAC roles.
+* **Auth Service Session & Middleware Controls**: Implementing refresh token rotation (RTR) and session invalidation (logout).
 
 ### Remaining
-* **Auth Service Microservice**: Authenticated routes, roles management (customer vs. airline desk clerk), JWT generation.
+* **Auth Service Service Gateways**: Downstream gateway token verification and role authorization mappings.
 * **Production Prep**: E2E integration and load testing boundaries.
 
 ---

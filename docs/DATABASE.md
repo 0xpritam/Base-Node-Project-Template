@@ -130,3 +130,76 @@ erDiagram
   * `bookingId` (FK Index)
   * `flightId_status`: Composite Index on `(flightId, status)` to optimize queries for available seats.
   * `flightId_seatId_unique`: Composite Unique Index on `(flightId, seatId)` to prevent duplicate seat assignments.
+
+---
+
+## 3. Auth Service Database (`auth_db`)
+
+The Auth Service manages authorization credentials, user profiles, identity roles, and sessions.
+
+### A. `Users` Table
+* **Purpose**: Stores profile, credentials, status, and versioning variables for users.
+* **Columns**:
+  * `id` (INT, PK, Auto Increment, Non-Null)
+  * `firstName` (VARCHAR(255), Non-Null)
+  * `lastName` (VARCHAR(255), Non-Null)
+  * `email` (VARCHAR(255), Unique, Non-Null)
+  * `password` (VARCHAR(255), Non-Null)
+  * `phoneNumber` (VARCHAR(255), Nullable)
+  * `status` (ENUM('ACTIVE', 'BLOCKED', 'DELETED'), Default: 'ACTIVE', Non-Null)
+  * `isEmailVerified` (BOOLEAN, Default: false, Non-Null)
+  * `tokenVersion` (INT, Default: 0, Non-Null)
+  * `createdAt` (DATETIME, Non-Null)
+  * `updatedAt` (DATETIME, Non-Null)
+* **Indexes**:
+  * `PRIMARY` on `id`
+  * `users_email_unique`: Unique Index on `email`
+
+### B. `Roles` Table
+* **Purpose**: Master table defining access scopes and authorization levels (e.g. `ADMIN`, `CUSTOMER`, `AIRLINE_ADMIN`).
+* **Columns**:
+  * `id` (INT, PK, Auto Increment, Non-Null)
+  * `name` (VARCHAR(255), Unique, Non-Null)
+  * `description` (VARCHAR(255), Nullable)
+  * `createdAt` (DATETIME, Non-Null)
+  * `updatedAt` (DATETIME, Non-Null)
+* **Indexes**:
+  * `PRIMARY` on `id`
+  * `roles_name_unique`: Unique Index on `name`
+
+### C. `UserRoles` Table
+* **Purpose**: Join table mapping Users to Roles (Many-to-Many).
+* **Columns**:
+  * `id` (INT, PK, Auto Increment, Non-Null)
+  * `userId` (INT, FK -> `Users.id`, Non-Null)
+  * `roleId` (INT, FK -> `Roles.id`, Non-Null)
+  * `createdAt` (DATETIME, Non-Null)
+  * `updatedAt` (DATETIME, Non-Null)
+* **Foreign Keys**:
+  * References `Users.id` (ON DELETE CASCADE)
+  * References `Roles.id` (ON DELETE CASCADE)
+* **Indexes**:
+  * `PRIMARY` on `id`
+  * `user_roles_composite_unique`: Unique Composite Index on `(userId, roleId)`
+  * `roleId` (FK Index)
+
+### D. `UserSessions` Table
+* **Purpose**: Stores active login details, refresh tokens, and device audit logs.
+* **Columns**:
+  * `id` (INT, PK, Auto Increment, Non-Null)
+  * `userId` (INT, FK -> `Users.id`, Non-Null)
+  * `refreshToken` (VARCHAR(255), Unique, Non-Null)
+  * `expiresAt` (DATETIME, Non-Null)
+  * `revoked` (BOOLEAN, Default: false, Non-Null)
+  * `lastUsedAt` (DATETIME, Non-Null)
+  * `userAgent` (VARCHAR(512), Nullable)
+  * `ipAddress` (VARCHAR(45), Nullable)
+  * `createdAt` (DATETIME, Non-Null)
+  * `updatedAt` (DATETIME, Non-Null)
+* **Foreign Keys**:
+  * References `Users.id` (ON DELETE CASCADE)
+* **Indexes**:
+  * `PRIMARY` on `id`
+  * `user_sessions_refresh_token_unique`: Unique Index on `refreshToken`
+  * `userId` (FK Index)
+
