@@ -245,7 +245,8 @@ class UserService {
         const tokenPayload = {
             sub: String(user.id),
             sessionId: String(sessionId),
-            tokenVersion: user.tokenVersion
+            tokenVersion: user.tokenVersion,
+            jti: crypto.randomBytes(16).toString('hex')
         };
         return jwt.sign(tokenPayload, ServerConfig.JWT_REFRESH_SECRET, {
             expiresIn: ServerConfig.JWT_REFRESH_EXPIRES_IN
