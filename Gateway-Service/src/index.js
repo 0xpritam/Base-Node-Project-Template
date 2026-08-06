@@ -2,7 +2,11 @@ const express = require('express');
 const { ServerConfig, Logger } = require('./config');
 const routes = require('./routes');
 
+const { RequestLogger } = require('./middlewares');
+
 const app = express();
+
+app.use(RequestLogger);
 
 // Mount health and base routes
 app.use('/', routes);
