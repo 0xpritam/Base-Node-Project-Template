@@ -15,18 +15,15 @@ This roadmap details the current implementation status and outlines subsequent m
 * **Seat Table Schema**: Database schema models, seeders, and migrations for `Seats` containing rows, columns, and tier categorizations (`business`, `economy`, `first-class`).
 * **Flight Service Stabilization & Debugging**: Fixed the Flight-Airport datatype mismatch, controller typos (`res.jsoon`), spelling inconsistencies (`updtateFlight`, `updtaeAirplane`), and middleware validation bugs.
 * **Concurrency Seat Locking Engine**: Ported row-level transaction locking (`SELECT FOR UPDATE`) and the `PATCH /flight/:id/seats` API to the active root project.
-* **Booking Service Scaffolding**: Initialized `/Booking-Service` microservice, creating its `package.json`, environment configs, database tables migrations (Bookings, Passengers, Tickets), Sequelize models, repositories, controllers, services, and route layers.
-* **Booking Service Saga Logic**: Fully implemented creation locks, Saga payment confirmation/failure flows, and double-guarded background timeout sweeps (Redis Expiry + database Recovery worker).
-* **Auth Service Boilerplate & DB Persistence (Milestones 5.1 & 5.2)**: Created dedicated `/Auth-Service` directory, Winston logger config, response proxies, database schemas and models (User, Role, UserRole, UserSession), migrations, seeders, and repositories.
-* **Auth Service Core APIs (Milestone 5.3)**: Fully implemented registration (with password complexity checks, duplicate email prevention), login authentication (status guards, bcrypt checks), and authenticated profile retrieval (`GET /me` excluding passwords).
-* **Auth Service Session & Logout Management (Milestone 5.4)**: Implemented refresh token configuration, one-time refresh token rotation (RTR) with replay attack detection, automatic session revocation, and logout mechanisms.
+* **Booking Service Scaffold & Logic**: Initialized parallel directory structure, set up migrations/models (Bookings, Passengers, Tickets), and fully implemented reservation locks, payment Saga, and recovery sweep logic.
+* **Auth Service & Middleware Integration**: Scaffolded Auth Service (User, Role, UserRole, UserSession schemas), implemented session RTR and logout, and integrated `authenticateJWT` and `authorizeRoles` middlewares across Flight Service and Booking Service endpoints with complete E2E verification.
 
 ### In Progress
-* **Auth Service Middleware Integration (Milestone 5.5)**: Building authenticateJWT and authorizeRoles middleware boundaries to secure downstream routes.
+* **Production Deployment Configuration**: Preparing environment profiles and standard configuration guides for production cluster environments.
 
 ### Remaining
-* **Gateway Wire-up**: Integrating JWT verification and role authorization with Booking and Flight services.
-* **Production Prep**: E2E integration and load testing boundaries.
+* **Gateway Wire-up**: Integrating a standalone API Gateway (optional layer if requested).
+* **Load Testing**: Conducting high-concurrency load testing bounds.
 
 ---
 
