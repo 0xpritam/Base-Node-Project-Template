@@ -19,12 +19,13 @@ This roadmap details the current implementation status and outlines subsequent m
 * **Booking Service Saga Logic**: Fully implemented creation locks, Saga payment confirmation/failure flows, and double-guarded background timeout sweeps (Redis Expiry + database Recovery worker).
 * **Auth Service Boilerplate & DB Persistence (Milestones 5.1 & 5.2)**: Created dedicated `/Auth-Service` directory, Winston logger config, response proxies, database schemas and models (User, Role, UserRole, UserSession), migrations, seeders, and repositories.
 * **Auth Service Core APIs (Milestone 5.3)**: Fully implemented registration (with password complexity checks, duplicate email prevention), login authentication (status guards, bcrypt checks), and authenticated profile retrieval (`GET /me` excluding passwords).
+* **Auth Service Session & Logout Management (Milestone 5.4)**: Implemented refresh token configuration, one-time refresh token rotation (RTR) with replay attack detection, automatic session revocation, and logout mechanisms.
 
 ### In Progress
-* **Auth Service Session & Middleware Controls**: Implementing refresh token rotation (RTR) and session invalidation (logout).
+* **Auth Service Middleware Integration (Milestone 5.5)**: Building authenticateJWT and authorizeRoles middleware boundaries to secure downstream routes.
 
 ### Remaining
-* **Auth Service Service Gateways**: Downstream gateway token verification and role authorization mappings.
+* **Gateway Wire-up**: Integrating JWT verification and role authorization with Booking and Flight services.
 * **Production Prep**: E2E integration and load testing boundaries.
 
 ---

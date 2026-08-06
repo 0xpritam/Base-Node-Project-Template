@@ -43,15 +43,29 @@ async function login(req, res) {
 }
 
 async function refresh(req, res) {
-    // TODO: Implement token refresh
-    SuccessResponse.message = 'Refresh endpoint placeholder';
-    return res.status(StatusCodes.NOT_IMPLEMENTED).json(SuccessResponse);
+    try {
+        const response = await userService.refreshAccessToken(req.body.refreshToken);
+        SuccessResponse.message = 'Successfully generated new access token';
+        SuccessResponse.data = response;
+        return res.status(StatusCodes.OK).json(SuccessResponse);
+    } catch (error) {
+        ErrorResponse.message = 'Token refresh failed';
+        ErrorResponse.error = error;
+        return res.status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR).json(ErrorResponse);
+    }
 }
 
 async function logout(req, res) {
-    // TODO: Implement user logout
-    SuccessResponse.message = 'Logout endpoint placeholder';
-    return res.status(StatusCodes.NOT_IMPLEMENTED).json(SuccessResponse);
+    try {
+        const response = await userService.logout(req.body.refreshToken);
+        SuccessResponse.message = 'Successfully logged out user and revoked session';
+        SuccessResponse.data = response;
+        return res.status(StatusCodes.OK).json(SuccessResponse);
+    } catch (error) {
+        ErrorResponse.message = 'Logout failed';
+        ErrorResponse.error = error;
+        return res.status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR).json(ErrorResponse);
+    }
 }
 
 async function getMe(req, res) {

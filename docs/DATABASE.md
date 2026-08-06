@@ -21,6 +21,10 @@ erDiagram
     
     Bookings ||--o{ Tickets : "contains (on bookingId)"
     Passengers ||--o{ Tickets : "assigned to (on passengerId)"
+    
+    Users ||--o{ UserRoles : "has roles (on userId)"
+    Roles ||--o{ UserRoles : "mapped to users (on roleId)"
+    Users ||--o{ UserSessions : "has sessions (on userId)"
 ```
 
 ---

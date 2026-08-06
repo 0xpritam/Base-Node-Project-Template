@@ -1,5 +1,5 @@
 const { UserRepository, RoleRepository, UserSessionRepository } = require('../repositories');
-const { sequelize } = require('../models');
+const { sequelize, UserSession } = require('../models');
 const AppError = require('../utils/errors/app-error');
 const { StatusCodes } = require('http-status-codes');
 const jwt = require('jsonwebtoken');
@@ -78,28 +78,23 @@ class UserService {
             throw new AppError('Invalid email or password', StatusCodes.UNAUTHORIZED);
         }
 
-        const roles = await user.getRoles();
+               const roles = await user.getRoles();
         const roleNames = roles.map(r => r.name);
 
-        const tokenPayload = {
-            sub: String(user.id),
-            email: user.email,
-            roles: roleNames,
-            tokenVersion: user.tokenVersion
-        };
-        const accessToken = jwt.sign(tokenPayload, ServerConfig.JWT_SECRET, {
-            expiresIn: ServerConfig.JWT_ACCESS_EXPIRY
-        });
+        const accessToken = await this.generateAccessToken(user);
 
-        const refreshToken = crypto.randomBytes(32).toString('hex');
-        await userSessionRepository.createSession({
+        const tempToken = crypto.randomBytes(32).toString('hex');
+        const session = await userSessionRepository.createSession({
             userId: user.id,
-            refreshToken,
-            expiresAt: new Date(Date.now() + ServerConfig.JWT_REFRESH_EXPIRY * 1000),
+            refreshToken: tempToken,
+            expiresAt: new Date(Date.now() + ServerConfig.JWT_REFRESH_EXPIRES_IN * 1000),
             lastUsedAt: new Date(),
             userAgent: data.userAgent,
             ipAddress: data.ipAddress
         });
+
+        const refreshToken = await this.generateRefreshToken(user, session.id);
+        await userSessionRepository.updateRefreshToken(session.id, refreshToken, session.expiresAt);
 
         const userResponse = {
             id: user.id,
@@ -115,18 +110,84 @@ class UserService {
 
         return {
             user: userResponse,
-            accessToken
+            accessToken,
+            refreshToken
         };
     }
 
     async refreshAccessToken(refreshToken) {
-        // TODO: Implement refresh token rotation (RTR) logic
-        return null;
+        let decoded;
+        try {
+            decoded = await this.verifyRefreshToken(refreshToken);
+        } catch (error) {
+            throw new AppError(error.explanation || 'Invalid refresh token', StatusCodes.UNAUTHORIZED);
+        }
+
+        const session = await UserSession.findByPk(Number(decoded.sessionId));
+        if (!session) {
+            throw new AppError('Invalid refresh token', StatusCodes.UNAUTHORIZED);
+        }
+
+        if (session.refreshToken !== refreshToken) {
+            session.revoked = true;
+            await session.save();
+            throw new AppError('Refresh token already rotated', StatusCodes.UNAUTHORIZED);
+        }
+
+        if (session.revoked) {
+            throw new AppError('Session revoked', StatusCodes.UNAUTHORIZED);
+        }
+
+        if (new Date(session.expiresAt) < new Date()) {
+            throw new AppError('Expired refresh token', StatusCodes.UNAUTHORIZED);
+        }
+
+        const user = await userRepository.findById(session.userId);
+        if (!user) {
+            throw new AppError('User not found', StatusCodes.UNAUTHORIZED);
+        }
+
+        if (user.status === 'BLOCKED') {
+            throw new AppError('Your account is blocked', StatusCodes.FORBIDDEN);
+        }
+        if (user.status === 'DELETED') {
+            throw new AppError('Your account is deactivated', StatusCodes.FORBIDDEN);
+        }
+
+        const accessToken = await this.generateAccessToken(user);
+        const newRefreshToken = await this.generateRefreshToken(user, session.id);
+        const newExpiresAt = new Date(Date.now() + ServerConfig.JWT_REFRESH_EXPIRES_IN * 1000);
+
+        await userSessionRepository.updateRefreshToken(session.id, newRefreshToken, newExpiresAt);
+
+        return {
+            accessToken,
+            refreshToken: newRefreshToken
+        };
     }
 
     async logout(refreshToken) {
-        // TODO: Implement session revocation logic
-        return null;
+        let decoded;
+        try {
+            decoded = await this.verifyRefreshToken(refreshToken);
+        } catch (error) {
+            throw new AppError(error.explanation || 'Invalid refresh token', StatusCodes.UNAUTHORIZED);
+        }
+
+        const session = await userSessionRepository.findByRefreshToken(refreshToken);
+        if (!session) {
+            throw new AppError('Session not found', StatusCodes.UNAUTHORIZED);
+        }
+
+        if (session.revoked) {
+            throw new AppError('Session already revoked', StatusCodes.UNAUTHORIZED);
+        }
+
+        await userSessionRepository.revokeSession(refreshToken);
+
+        return {
+            success: true
+        };
     }
 
     async getUserById(userId) {
@@ -164,6 +225,43 @@ class UserService {
     async assignRole(userId, roleName) {
         // TODO: Implement role assignment logic
         return null;
+    }
+
+    async generateAccessToken(user) {
+        const roles = await user.getRoles();
+        const roleNames = roles.map(r => r.name);
+        const tokenPayload = {
+            sub: String(user.id),
+            email: user.email,
+            roles: roleNames,
+            tokenVersion: user.tokenVersion
+        };
+        return jwt.sign(tokenPayload, ServerConfig.JWT_SECRET, {
+            expiresIn: ServerConfig.JWT_EXPIRES_IN
+        });
+    }
+
+    async generateRefreshToken(user, sessionId) {
+        const tokenPayload = {
+            sub: String(user.id),
+            sessionId: String(sessionId),
+            tokenVersion: user.tokenVersion
+        };
+        return jwt.sign(tokenPayload, ServerConfig.JWT_REFRESH_SECRET, {
+            expiresIn: ServerConfig.JWT_REFRESH_EXPIRES_IN
+        });
+    }
+
+    async verifyRefreshToken(token) {
+        try {
+            const decoded = jwt.verify(token, ServerConfig.JWT_REFRESH_SECRET);
+            return decoded;
+        } catch (error) {
+            if (error.name === 'TokenExpiredError') {
+                throw new AppError('Refresh token has expired', StatusCodes.UNAUTHORIZED);
+            }
+            throw new AppError('Invalid refresh token signature', StatusCodes.UNAUTHORIZED);
+        }
     }
 }
 

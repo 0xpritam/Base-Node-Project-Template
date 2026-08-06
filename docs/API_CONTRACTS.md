@@ -345,11 +345,13 @@ These endpoints are exposed by Flight Service to manage individual seat mappings
 ### A. Create Booking
 * **HTTP Method**: `POST`
 * **Path**: `/api/v1/bookings`
+* **Headers**:
+  * `Authorization`: `Bearer <Access_Token>` (Required)
 * **Request Body**:
   ```json
   {
     "flightId": 1,
-    "userId": 4,
+    "userId": 4, // (Ignored and overwritten by the authenticated req.user.id)
     "noOfSeats": 2,
     "passengers": [
       { "firstName": "John", "lastName": "Doe", "seatId": 14 },
@@ -374,6 +376,8 @@ These endpoints are exposed by Flight Service to manage individual seat mappings
 ### B. Payment Webhook Callback
 * **HTTP Method**: `POST`
 * **Path**: `/api/v1/bookings/payments`
+* **Headers**:
+  * `Authorization`: `Bearer <Access_Token>` (Required)
 * **Request Body**:
   ```json
   {
@@ -481,7 +485,8 @@ All routes are prefixed with `/api/v1/auth`.
         "createdAt": "2026-08-01T00:00:00.000Z",
         "updatedAt": "2026-08-01T00:00:00.000Z"
       },
-      "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIx..."
+      "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIx...",
+      "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIx..."
     },
     "error": {}
   }
@@ -514,5 +519,160 @@ All routes are prefixed with `/api/v1/auth`.
     "error": {}
   }
   ```
+
+### D. Refresh Access Token
+* **HTTP Method**: `POST`
+* **Path**: `/refresh`
+* **Request Body**:
+  ```json
+  {
+    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMSIsInNlc3Np..."
+  }
+  ```
+* **Success Response (`200 OK`)**:
+  ```json
+  {
+    "success": true,
+    "message": "Successfully generated new access token",
+    "data": {
+      "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMSIsImVtYWls...",
+      "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMSIsInNlc3Np..."
+    },
+    "error": {}
+  }
+  ```
+* **Error Response (`401 Unauthorized` - Expired Refresh Token)**:
+  ```json
+  {
+    "success": false,
+    "message": "Token refresh failed",
+    "data": {},
+    "error": {
+      "name": "AppError",
+      "statusCode": 401,
+      "explanation": "Expired refresh token"
+    }
+  }
+  ```
+* **Error Response (`401 Unauthorized` - Replay Attack / Already Rotated)**:
+  ```json
+  {
+    "success": false,
+    "message": "Token refresh failed",
+    "data": {},
+    "error": {
+      "name": "AppError",
+      "statusCode": 401,
+      "explanation": "Refresh token already rotated"
+    }
+  }
+  ```
+
+### E. Logout User (Revoke Session)
+* **HTTP Method**: `POST`
+* **Path**: `/logout`
+* **Request Body**:
+  ```json
+  {
+    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIx..."
+  }
+  ```
+* **Success Response (`200 OK`)**:
+  ```json
+  {
+    "success": true,
+    "message": "Successfully logged out user and revoked session",
+    "data": {
+      "success": true
+    },
+    "error": {}
+  }
+  ```
+* **Error Response (`401 Unauthorized` - Session Already Revoked)**:
+  ```json
+  {
+    "success": false,
+    "message": "Logout failed",
+    "data": {},
+    "error": {
+      "name": "AppError",
+      "statusCode": 401,
+      "explanation": "Session already revoked"
+    }
+  }
+  ```
+
+---
+
+## 6. Request Authentication Contract
+
+Downstream protected endpoints across Booking Service and Flight Service require a verified JSON Web Token (JWT) supplied inside request headers.
+
+### HTTP Headers
+* `Authorization`: `Bearer <Access_Token>`
+
+### Reusable Authentication Error Contracts
+
+#### 1. Missing Authorization Header (`401 Unauthorized`)
+Returned when the request completely omits the `Authorization` header.
+```json
+{
+  "success": false,
+  "message": "Authentication failed",
+  "data": {},
+  "error": {
+    "name": "AppError",
+    "statusCode": 401,
+    "explanation": "Missing Authorization header"
+  }
+}
+```
+
+#### 2. Invalid Bearer format (`401 Unauthorized`)
+Returned when the header is present but does not start with `Bearer `.
+```json
+{
+  "success": false,
+  "message": "Authentication failed",
+  "data": {},
+  "error": {
+    "name": "AppError",
+    "statusCode": 401,
+    "explanation": "Invalid Bearer token format"
+  }
+}
+```
+
+#### 3. Expired Access Token (`401 Unauthorized`)
+Returned when the token signature is valid but has expired.
+```json
+{
+  "success": false,
+  "message": "Authentication failed",
+  "data": {},
+  "error": {
+    "name": "AppError",
+    "statusCode": 401,
+    "explanation": "Expired JWT token"
+  }
+}
+```
+
+#### 4. Invalid Signature/Token (`401 Unauthorized`)
+Returned when token verification fails due to tampering, key mismatches, or malformed JWT syntax.
+```json
+{
+  "success": false,
+  "message": "Authentication failed",
+  "data": {},
+  "error": {
+    "name": "AppError",
+    "statusCode": 401,
+    "explanation": "Invalid JWT token"
+  }
+}
+```
+
+
 
 

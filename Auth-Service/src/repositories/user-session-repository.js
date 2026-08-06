@@ -12,7 +12,10 @@ class UserSessionRepository extends CrudRepository {
 
     async revokeSession(token) {
         const [affectedRows] = await UserSession.update(
-            { revoked: true },
+            { 
+                revoked: true,
+                lastUsedAt: new Date()
+            },
             { where: { refreshToken: token } }
         );
         return affectedRows > 0;
@@ -20,6 +23,32 @@ class UserSessionRepository extends CrudRepository {
 
     async findByRefreshToken(token) {
         return await UserSession.findOne({ where: { refreshToken: token } });
+    }
+
+    async updateRefreshToken(sessionId, newRefreshToken, expiresAt, transaction = null) {
+        const [affectedRows] = await UserSession.update(
+            { 
+                refreshToken: newRefreshToken, 
+                expiresAt,
+                lastUsedAt: new Date()
+            },
+            { 
+                where: { id: sessionId },
+                transaction
+            }
+        );
+        return affectedRows > 0;
+    }
+
+    async revokeAllSessions(userId, transaction = null) {
+        const [affectedRows] = await UserSession.update(
+            { revoked: true },
+            { 
+                where: { userId },
+                transaction
+            }
+        );
+        return affectedRows > 0;
     }
 }
 

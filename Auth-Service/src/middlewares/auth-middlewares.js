@@ -39,7 +39,29 @@ function validateLoginRequest(req, res, next) {
     next();
 }
 
+function validateRefreshTokenRequest(req, res, next) {
+    const { refreshToken } = req.body;
+    if (!refreshToken || typeof refreshToken !== 'string') {
+        ErrorResponse.message = 'Validation failed';
+        ErrorResponse.error = new AppError('refreshToken is a required string parameter', StatusCodes.BAD_REQUEST);
+        return res.status(StatusCodes.BAD_REQUEST).json(ErrorResponse);
+    }
+    next();
+}
+
+function validateLogoutRequest(req, res, next) {
+    const { refreshToken } = req.body;
+    if (!refreshToken || typeof refreshToken !== 'string') {
+        ErrorResponse.message = 'Validation failed';
+        ErrorResponse.error = new AppError('refreshToken is a required string parameter', StatusCodes.BAD_REQUEST);
+        return res.status(StatusCodes.BAD_REQUEST).json(ErrorResponse);
+    }
+    next();
+}
+
 module.exports = {
     validateRegisterRequest,
-    validateLoginRequest
+    validateLoginRequest,
+    validateRefreshTokenRequest,
+    validateLogoutRequest
 };
