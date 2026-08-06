@@ -2,11 +2,14 @@ const express = require('express');
 const { ServerConfig, Logger } = require('./config');
 const routes = require('./routes');
 
-const { RequestLogger } = require('./middlewares');
+const { RequestLogger, RateLimiter } = require('./middlewares');
 
 const app = express();
 
+app.set('trust proxy', ServerConfig.TRUST_PROXY);
+
 app.use(RequestLogger);
+app.use(RateLimiter);
 
 // Mount health and base routes
 app.use('/', routes);
