@@ -7,8 +7,8 @@ const limiter = rateLimit({
     standardHeaders: true,
     legacyHeaders: false,
     skip: (req) => {
-        // Exclude GET /health from rate limiting
-        return req.method === 'GET' && req.path === '/health';
+        // Exclude GET /health and all OPTIONS requests from rate limiting
+        return req.method === 'OPTIONS' || (req.method === 'GET' && req.path === '/health');
     },
     handler: (req, res) => {
         return res.status(429).json({
