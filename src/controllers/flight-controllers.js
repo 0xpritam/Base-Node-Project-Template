@@ -115,9 +115,26 @@ async function updateSeats(req, res) {
         console.log(req.body);
         const response = await FlightService.updateSeats({
             flightId: req.params.id,
-            seats: req.body.seats, 
-            dec: req.body.dec
+            seatIds: req.body.seatIds, 
+            action: req.body.action,
+            bookingId: req.body.bookingId,
+            reservedUntil: req.body.reservedUntil
         });
+        SuccessResponse.data = response;
+        return res
+                .status(StatusCodes.OK)
+                .json({ SuccessResponse });
+    } catch(error) {
+        ErrorRespose.error = error;
+        return res
+                .status(error.StatusCode || StatusCodes.INTERNAL_SERVER_ERROR)
+                .json({ ErrorRespose });
+    }
+}
+
+async function getFlightSeats(req, res) {
+    try {
+        const response = await FlightService.getFlightSeats(req.params.id);
         SuccessResponse.data = response;
         return res
                 .status(StatusCodes.OK)
@@ -136,5 +153,6 @@ module.exports = {
     updateFlight,
     deleteFlight,
     getAllFlights,
-    updateSeats
+    updateSeats,
+    getFlightSeats
 }

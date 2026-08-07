@@ -1,11 +1,13 @@
 const { StatusCodes } = require('http-status-codes');
-const { FlightRepositories } = require('../repositories');
+const { FlightRepositories, FlightSeatRepository } = require('../repositories');
 const AppError = require('../utils/errors/app-errors');
+const db = require('../models');
 const { compareTime } = require('../utils/helpers/datetime-helpers');
 const { Op } = require('sequelize');
 
 
 const flightRepositories = new FlightRepositories();
+const flightSeatRepository = new FlightSeatRepository();
 
 async function createFlights(data) {
     try {
@@ -126,12 +128,59 @@ async function getAllFlights(query) {
 }
 
 async function updateSeats(data) {
+    const transaction = await db.sequelize.transaction();
     try {
-        const response = await flightRepositories.updateRemainingSeats(data.flightId, data.seats, data.dec);
+        let response;
+        if (data.action === 'RESERVE') {
+            response = await flightSeatRepository.reserveSeats(
+                data.flightId, 
+                data.seatIds, 
+                data.bookingId, 
+                data.reservedUntil,
+                transaction
+            );
+            await flightRepositories.updateRemainingSeats(data.flightId, data.seatIds.length, true, transaction);
+        } else if (data.action === 'RELEASE') {
+            response = await flightSeatRepository.releaseSeats(
+                data.flightId, 
+                data.seatIds,
+                data.bookingId,
+                transaction
+            );
+            await flightRepositories.updateRemainingSeats(data.flightId, data.seatIds.length, false, transaction);
+        } else if (data.action === 'CONFIRM') {
+            response = await flightSeatRepository.confirmSeats(
+                data.flightId,
+                data.seatIds,
+                data.bookingId,
+                transaction
+            );
+        } else {
+            throw new AppError('Invalid action specified', StatusCodes.BAD_REQUEST);
+        }
+        await transaction.commit();
         return response;
     } catch(error) {
+        await transaction.rollback();
         console.log(error);
-        throw new AppError('Cannot update data of the flight', StatusCodes.INTERNAL_SERVER_ERROR);
+        if (error.name === 'AppError') throw error;
+        throw new AppError(error.message || 'Cannot update seats of the flight', StatusCodes.INTERNAL_SERVER_ERROR);
+    }
+}
+
+async function getFlightSeats(flightId) {
+    try {
+        const flightSeats = await flightSeatRepository.getFlightSeats(flightId);
+        const formattedSeats = flightSeats.map(fs => ({
+            seatId: fs.seatId,
+            seatNumber: `${fs.seatDetail.row}${fs.seatDetail.col}`,
+            seatType: fs.seatDetail.type,
+            status: fs.status
+        }));
+        return formattedSeats;
+    } catch(error) {
+        console.log(error);
+        throw new AppError('Cannot fetch seat map of the flight', StatusCodes.INTERNAL_SERVER_ERROR);
     }
 }
 
@@ -141,5 +190,6 @@ module.exports = {
     updateFlight,
     destroyFlight,
     getAllFlights,
-    updateSeats
+    updateSeats,
+    getFlightSeats
 }

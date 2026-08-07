@@ -78,9 +78,24 @@ function validatecreateRequest(req, res, next) {
 }
 
 function validateUpdateSeatsRequest(req, res, next) {
-    if(!req.body.seats) {
+    const { seatIds, action, bookingId } = req.body;
+    if(!seatIds || !Array.isArray(seatIds) || seatIds.length === 0) {
         ErrorRespose.message = 'Something went wrong while updating seats';
-        ErrorRespose.error = new AppError(['seats not found in the incoming request in the correct form'], StatusCodes.BAD_REQUEST);
+        ErrorRespose.error = new AppError(['seatIds array not found or empty in the incoming request'], StatusCodes.BAD_REQUEST);
+        return res
+                .status(StatusCodes.BAD_REQUEST)
+                .json({ ErrorRespose });
+    }
+    if(!action || !['RESERVE', 'RELEASE', 'CONFIRM'].includes(action)) {
+        ErrorRespose.message = 'Something went wrong while updating seats';
+        ErrorRespose.error = new AppError(['Action must be either RESERVE, RELEASE or CONFIRM'], StatusCodes.BAD_REQUEST);
+        return res
+                .status(StatusCodes.BAD_REQUEST)
+                .json({ ErrorRespose });
+    }
+    if(!bookingId) {
+        ErrorRespose.message = 'Something went wrong while updating seats';
+        ErrorRespose.error = new AppError(['bookingId is required for this action'], StatusCodes.BAD_REQUEST);
         return res
                 .status(StatusCodes.BAD_REQUEST)
                 .json({ ErrorRespose });

@@ -1,0 +1,26 @@
+{
+  "development": {
+    "username": "root",
+    "password": "Pritam722136",
+    "database": "bookings",
+    "host": "127.0.0.1",
+    "dialect": "mysql",
+    "timezone": "+05:30"
+  },
+  "test": {
+    "username": "root",
+    "password": null,
+    "database": "bookings_test",
+    "host": "127.0.0.1",
+    "dialect": "mysql",
+    "timezone": "+05:30"
+  },
+  "production": {
+    "username": "root",
+    "password": null,
+    "database": "bookings_production",
+    "host": "127.0.0.1",
+    "dialect": "mysql",
+    "timezone": "+05:30"
+  }
+}
